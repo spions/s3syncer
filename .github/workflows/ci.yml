@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - name: Lint
         run: helm lint deploy/charts/s3syncer
       - name: Template
