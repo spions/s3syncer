@@ -101,6 +101,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         goos: [linux, darwin]
         goarch: [amd64, arm64]
@@ -122,7 +123,8 @@ jobs:
         run: |
           mkdir dist
           go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o s3syncer ./cmd/s3syncer
-          tar -czf "dist/s3syncer_${VERSION}_${GOOS}_${GOARCH}.tar.gz" s3syncer LICENSE README.md
+          # a branch name (dry run) may contain "/", which is not valid in a file name
+          tar -czf "dist/s3syncer_${VERSION//\//-}_${GOOS}_${GOARCH}.tar.gz" s3syncer LICENSE README.md
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
