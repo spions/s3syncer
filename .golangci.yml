@@ -1,0 +1,29 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - integration
+
+linters:
+  settings:
+    errcheck:
+      # Failures of these are not actionable (client went away mid-response)
+      exclude-functions:
+        - (*encoding/json.Encoder).Encode
+        - (*encoding/xml.Encoder).Encode
+        - io.Copy
+        - io.WriteString
+  default: standard
+  enable:
+    - bodyclose
+    - misspell
+    - unconvert
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # manager.Uploader is deprecated in favour of feature/s3/transfermanager;
+      # migration is tracked separately, the multipart streaming upload relies on it
+      - path: internal/storage/s3backend.go
+        text: "SA1019"

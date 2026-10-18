@@ -1,0 +1,52 @@
+---
+# s3syncer example configuration. Copy to config.yaml and adjust.
+listen_addr: ":8080"
+
+# Run mode, always explicit and never inferred:
+#   single  - one instance. Sync queue in local SQLite (db_path), per-object locks in memory. Default.
+#   cluster - several instances sharing one Redis: queue and per-object locks live in Redis.
+mode: single
+# redis:                        # cluster mode only; a redis section in single mode is a config error
+#   addr: "redis:6379"
+#   username: ""
+#   password: ""                # or S3SYNCER_REDIS_PASSWORD
+#   db: 0
+#   tls: false
+#   key_prefix: default         # separates several s3syncer deployments on one Redis
+
+# SQLite file. single: the sync queue. cluster: only the local state of resync/bisync tasks.
+db_path: "/app/data/s3syncer.db"
+sync_interval_seconds: 10
+operation_timeout_seconds: 5
+# api_token: CHANGE_ME          # Bearer token for /api/*; without it the API is loopback-only (or set S3SYNCER_API_TOKEN)
+# max_put_size_bytes: 0         # 0 = unlimited; set a limit in production
+# log_level: info               # debug | info | warn | error (per-request logs are debug)
+# put_memory_wait_seconds: 30   # wait for upload memory before answering 503
+# request_body_idle_timeout_seconds: 60
+# shutdown_grace_seconds: 30
+# put_stream_threshold_bytes: 33554432  # PUT bodies >= this are streamed to primary only, backups sync async (default 32 MiB)
+# put_memory_budget_bytes: 268435456  # cap on memory held by in-flight PUT bodies; extra uploads wait (default 256 MiB, min 48 MiB). Set below the container memory limit
+
+virtual_buckets:
+  - virtualBucket: mybucket            # bucket name clients use
+    primaryBackendName: primary        # reads go here first, writes are replicated to the rest
+    access_key_id: CHANGE_ME           # credentials clients use against s3syncer
+    secret_access_key: CHANGE_ME
+    public_read: false                 # allow anonymous GET/HEAD of objects
+    backends:
+      - name: primary
+        type: s3
+        region: us-east-1
+        bucket: my-primary-bucket
+        endpoint: "https://s3.example.com"
+        force_path_style: true
+        access_key_id: CHANGE_ME
+        secret_access_key: CHANGE_ME
+      - name: backup
+        type: s3
+        region: us-east-1
+        bucket: my-backup-bucket
+        endpoint: "https://s3.backup.example.com"
+        force_path_style: true
+        access_key_id: CHANGE_ME
+        secret_access_key: CHANGE_ME

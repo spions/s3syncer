@@ -1,0 +1,81 @@
+---
+# Cluster-mode e2e environment: two s3syncer instances on one Redis and their own
+# MinIO pair. Self-contained, so it can run next to the single-instance environment
+# from docker-compose.dev.yml. Use it with its own project name (make test-cluster does):
+#   docker compose -p s3syncer-cluster -f deploy/docker/docker-compose.cluster.yml up -d --build --wait s3syncer-a s3syncer-b
+# Host ports: instances 8081 and 8082, MinIO 19000 and 19002.
+
+x-s3syncer: &s3syncer
+  build: ../..
+  image: s3syncer:cluster-e2e
+  command: ["-config", "/config.yaml"]
+  volumes:
+    - ../../tests/config.cluster.yaml:/config.yaml:ro
+  depends_on:
+    minio-init:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/readyz"]
+    interval: 3s
+    timeout: 3s
+    retries: 20
+
+x-minio: &minio
+  image: ${MINIO_IMAGE:-pgsty/silo:RELEASE.2026-10-15T00-00-00Z}
+  command: server /data
+  environment:
+    MINIO_ROOT_USER: testtest
+    MINIO_ROOT_PASSWORD: testtest
+  healthcheck:
+    test: ["CMD", "mc", "ready", "local"]
+    interval: 5s
+    timeout: 5s
+    retries: 5
+
+services:
+  minio1:
+    <<: *minio
+    ports:
+      - "19000:9000"
+
+  minio2:
+    <<: *minio
+    ports:
+      - "19002:9000"
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-pgsty/mc:RELEASE.2026-09-16T00-00-00Z}
+    depends_on:
+      minio1:
+        condition: service_healthy
+      minio2:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set m1 http://minio1:9000 testtest testtest &&
+      mc alias set m2 http://minio2:9000 testtest testtest &&
+      mc mb --ignore-existing m1/testsync1 &&
+      mc mb --ignore-existing m2/testsync2 &&
+      echo 'Buckets created'
+      "
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  s3syncer-a:
+    <<: *s3syncer
+    ports:
+      - "8081:8080"
+
+  s3syncer-b:
+    <<: *s3syncer
+    ports:
+      - "8082:8080"

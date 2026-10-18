@@ -1,0 +1,21 @@
+---
+
+services:
+  s3syncer:
+    image: ghcr.io/spions/s3syncer:latest
+    container_name: s3syncer
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - s3syncer-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  s3syncer-data:

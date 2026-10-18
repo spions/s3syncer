@@ -1,0 +1,46 @@
+# MinIO client comes from the community build used by docker-compose.yml
+# (dl.min.io no longer serves binaries)
+ARG MC_IMAGE=pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+FROM ${MC_IMAGE} AS mc
+
+FROM ubuntu:22.04
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    fuse \
+    ca-certificates \
+    python3 \
+    python3-pip \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI (needed for some tests)
+RUN case "${TARGETARCH}" in arm64) AWSARCH=aarch64 ;; *) AWSARCH=x86_64 ;; esac \
+    && curl "https://awscli.amazonaws.com/awscli-exe-linux-${AWSARCH}.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install \
+    && rm -rf aws awscliv2.zip
+
+# Install GeeseFS
+RUN wget "https://github.com/yandex-cloud/geesefs/releases/download/v0.43.5/geesefs-linux-${TARGETARCH:-amd64}" -O /usr/local/bin/geesefs \
+    && chmod +x /usr/local/bin/geesefs
+
+# Install MinIO client (mc)
+COPY --from=mc /usr/bin/mc /usr/local/bin/mc
+
+# Create mount point and data directory
+RUN mkdir -p /mnt/testsync /data
+
+# Copy all test scripts
+COPY tests/entrypoint.sh /entrypoint.sh
+COPY tests/test-symlinks.sh /test-symlinks.sh
+COPY tests/test-directory-persistence.sh /test-directory-persistence.sh
+COPY tests/test-directory-persistence-simple.sh /test-directory-persistence-simple.sh
+COPY tests/test-paginated-symlinks.sh /test-paginated-symlinks.sh
+COPY tests/test-aws-cli.sh /test-aws-cli.sh
+RUN chmod +x /entrypoint.sh /test-symlinks.sh /test-directory-persistence.sh /test-directory-persistence-simple.sh /test-paginated-symlinks.sh /test-aws-cli.sh
+
+# Default entrypoint (can be overridden in docker-compose)
+ENTRYPOINT ["/entrypoint.sh"]

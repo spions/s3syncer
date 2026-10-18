@@ -1,0 +1,135 @@
+{{- if and .Values.ingress.enabled (not .Values.api.token) (not .Values.api.existingSecret) }}
+{{- fail "ingress.enabled requires api.token (or api.existingSecret): /api must not be exposed without authentication" }}
+{{- end }}
+# api.token is required when the ingress is enabled (checked above)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "s3syncer.fullname" . }}
+  labels:
+    {{- include "s3syncer.labels" . | nindent 4 }}
+spec:
+  {{- if and (ne .Values.mode "single") (ne .Values.mode "cluster") }}
+  {{- fail (printf "mode must be 'single' or 'cluster', got %q" .Values.mode) }}
+  {{- end }}
+  {{- if eq .Values.mode "cluster" }}
+  {{- if not .Values.redis.addr }}
+  {{- fail "mode: cluster requires redis.addr" }}
+  {{- end }}
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  {{- else }}
+  {{- if gt (int .Values.replicaCount) 1 }}
+  {{- fail "replicaCount > 1 requires mode: cluster (single mode keeps its queue in a local SQLite file and in-process locks)" }}
+  {{- end }}
+  # single mode: exactly one instance
+  replicas: 1
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "s3syncer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if not .Values.existingConfigSecret.name }}
+        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "s3syncer.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ include "s3syncer.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: s3syncer
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - -config
+            - /etc/s3syncer/{{ include "s3syncer.configSecretKey" . }}
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- if or .Values.api.token .Values.api.existingSecret }}
+            - name: S3SYNCER_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "s3syncer.apiSecretName" . }}
+                  key: {{ .Values.api.existingSecretKey }}
+            {{- end }}
+            {{- if and (eq .Values.mode "cluster") .Values.redis.existingSecret }}
+            - name: S3SYNCER_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.existingSecret }}
+                  key: {{ .Values.redis.existingSecretKey }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/s3syncer
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "s3syncer.configSecretName" . }}
+        - name: data
+          {{- if and .Values.persistence.enabled (eq .Values.mode "single") }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "s3syncer.fullname" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

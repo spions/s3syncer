@@ -1,0 +1,12 @@
+FROM golang:1.26-alpine
+
+RUN apk add --no-cache gcc musl-dev
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+CMD ["go", "test", "-v", "-tags", "integration", "-count=1", "-timeout", "300s", "./tests/"]

@@ -1,0 +1,39 @@
+---
+# s3syncer config for the cluster-mode e2e environment (docker-compose.cluster.yml).
+# Same buckets as config.docker.yaml, queue and task state in the shared Redis.
+mode: cluster
+redis:
+  addr: "redis:6379"
+  key_prefix: e2e
+
+listen_addr: ":8080"
+db_path: "/tmp/s3syncer.db"
+sync_interval_seconds: 2
+operation_timeout_seconds: 5
+api_token: testtest
+# Objects of 1 MiB and more are streamed to the primary only and replicated
+# through the queue, which is what these tests exercise.
+put_stream_threshold_bytes: 1048576
+
+virtual_buckets:
+  - virtualBucket: testsync
+    primaryBackendName: minio-backend1
+    access_key_id: testtest
+    secret_access_key: testtest
+    backends:
+      - name: minio-backend1
+        type: s3
+        region: us-east-1
+        bucket: testsync1
+        endpoint: "http://minio1:9000"
+        force_path_style: true
+        access_key_id: testtest
+        secret_access_key: testtest
+      - name: minio-backend2
+        type: s3
+        region: us-east-1
+        bucket: testsync2
+        endpoint: "http://minio2:9000"
+        force_path_style: true
+        access_key_id: testtest
+        secret_access_key: testtest

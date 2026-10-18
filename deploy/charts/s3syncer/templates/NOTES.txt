@@ -1,0 +1,18 @@
+s3syncer {{ .Chart.AppVersion }} installed.
+
+S3 endpoint (in cluster): http://{{ include "s3syncer.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+{{- if not .Values.config.virtual_buckets }}
+{{- if not .Values.existingConfigSecret.name }}
+
+WARNING: config.virtual_buckets is empty, s3syncer will refuse to serve any bucket.
+{{- end }}
+{{- end }}
+
+{{- if eq .Values.mode "cluster" }}
+Mode: cluster ({{ .Values.replicaCount }} replicas, shared Redis {{ .Values.redis.addr }}). resync/bisync task state is still per pod: call task-status/task-cancel on the pod that started the task.
+{{- else }}
+Mode: single. Run exactly one replica; use mode: cluster with a shared Redis for several.
+{{- end }}
+
+Reminder: /metrics is not authenticated; /api/* needs api.token.

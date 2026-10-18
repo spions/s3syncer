@@ -1,0 +1,16 @@
+---
+extends: default
+
+ignore: |
+  deploy/charts/*/templates/
+
+rules:
+  document-start: disable
+  truthy:
+    check-keys: false
+  # don't fail on long lines
+  line-length:
+    max: 350
+    level: warning
+  comments:
+    min-spaces-from-content: 1

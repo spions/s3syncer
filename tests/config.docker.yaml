@@ -1,0 +1,30 @@
+---
+
+listen_addr: ":8080"
+db_path: "/tmp/s3syncer.db"
+sync_interval_seconds: 10
+operation_timeout_seconds: 5
+api_token: testtest
+
+virtual_buckets:
+  - virtualBucket: testsync
+    primaryBackendName: minio-backend1
+    access_key_id: testtest
+    secret_access_key: testtest
+    backends:
+      - name: minio-backend1
+        type: s3
+        region: us-east-1
+        bucket: testsync1
+        endpoint: "http://minio1:9000"
+        force_path_style: true
+        access_key_id: testtest
+        secret_access_key: testtest
+      - name: minio-backend2
+        type: s3
+        region: us-east-1
+        bucket: testsync2
+        endpoint: "http://minio2:9000"
+        force_path_style: true
+        access_key_id: testtest
+        secret_access_key: testtest

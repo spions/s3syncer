@@ -1,0 +1,27 @@
+# Binaries
+/bin/
+*.exe
+*.test
+*.out
+
+# Runtime data
+/data/
+*.db
+*.log
+
+# Local config (use config.example.yaml as a template)
+/config.yaml
+
+# Environment
+.env
+
+# IDE / OS / tooling
+.idea/
+.vscode/
+.claude/
+.codegraph/
+.DS_Store
+
+# Go workspace
+go.work
+go.work.sum

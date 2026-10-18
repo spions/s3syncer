@@ -1,0 +1,169 @@
+# Run mode (never inferred):
+#   single  - sync queue in local SQLite, per-key locks in process memory:
+#             exactly ONE replica (strategy: Recreate, data on a PVC).
+#   cluster - queue and locks in a shared Redis: replicaCount may be > 1
+#             (strategy: RollingUpdate, data on emptyDir). See docs/cluster-mode.md.
+mode: single
+replicaCount: 1
+
+# Used when mode: cluster. The password is read from a Secret (env S3SYNCER_REDIS_PASSWORD), not from config.
+redis:
+  addr: ""            # e.g. redis:6379
+  username: ""
+  db: 0
+  tls: false
+  keyPrefix: ""       # separates several s3syncer deployments on one Redis
+  existingSecret: ""  # Secret holding the Redis password; leave empty for no password
+  existingSecretKey: redis-password
+
+image:
+  repository: ghcr.io/spions/s3syncer
+  # Defaults to the chart appVersion
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Application configuration (rendered to config.yaml and stored in a Secret
+# because it contains credentials). db_path is set by the chart.
+# See deploy/config.example.yaml in the repository for all options.
+config:
+  listen_addr: ":8080"
+  sync_interval_seconds: 10
+  operation_timeout_seconds: 5
+  # max_put_size_bytes: 0
+  # put_stream_threshold_bytes: 33554432
+  # put_memory_budget_bytes: 268435456
+  virtual_buckets: []
+  # - virtualBucket: mybucket
+  #   primaryBackendName: primary
+  #   access_key_id: CHANGE_ME
+  #   secret_access_key: CHANGE_ME
+  #   public_read: false
+  #   backends:
+  #     - name: primary
+  #       type: s3
+  #       region: us-east-1
+  #       bucket: my-primary-bucket
+  #       endpoint: "https://s3.example.com"
+  #       force_path_style: true
+  #       access_key_id: CHANGE_ME
+  #       secret_access_key: CHANGE_ME
+
+# Use an existing Secret holding the complete config file instead of `config` above.
+existingConfigSecret:
+  name: ""
+  key: config.yaml
+
+# Bearer token for the management API (/api/*). Without a token the API only
+# accepts connections from inside the pod itself (loopback), e.g. via
+# `kubectl exec`; set a token to call it through the Service or port-forward.
+api:
+  token: ""
+  existingSecret: ""
+  existingSecretKey: api-token
+
+persistence:
+  enabled: true
+  # Use an existing PVC instead of creating one
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  # PUT bodies can be large and GET responses are streamed, so disable body
+  # size limits and request buffering for ingress-nginx, e.g.:
+  annotations: {}
+  #  nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  #  nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+  #  nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #  nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: s3syncer.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# /metrics is not authenticated; restrict access with a NetworkPolicy or ingress rules.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels: {}
+
+# Must exceed config.shutdown_grace_seconds (default 30): uploads in flight get that long to finish.
+terminationGracePeriodSeconds: 60
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  periodSeconds: 5
+  failureThreshold: 12
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 1Gi
+
+# Extra environment variables
+env: []
+extraArgs: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

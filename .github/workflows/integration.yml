@@ -1,0 +1,120 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  s3:
+    name: S3 proxy + replication (2 MinIO-compatible servers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+          check-latest: true
+          cache: true
+      - name: Run integration tests (starts the Compose environment)
+        run: make test-integration
+      - name: Compose logs
+        if: failure()
+        run: docker compose -p s3syncer -f deploy/docker/docker-compose.dev.yml logs --no-color
+      - name: Stop environment
+        if: always()
+        run: make down
+
+  e2e:
+    name: Replication tests inside the Compose network
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run
+        run: make test-e2e
+      - name: Compose logs
+        if: failure()
+        run: docker compose -p s3syncer -f deploy/docker/docker-compose.dev.yml logs --no-color
+      - name: Stop environment
+        if: always()
+        run: make down
+
+  awscli:
+    name: Real AWS CLI (aws-chunked uploads)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: make test-awscli
+      - name: Compose logs
+        if: failure()
+        run: docker compose -p s3syncer -f deploy/docker/docker-compose.dev.yml logs --no-color
+      - name: Stop environment
+        if: always()
+        run: make down
+
+  redis:
+    name: Queue contract on a real Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+          check-latest: true
+          cache: true
+      - run: make test-redis
+
+  cluster:
+    name: Cluster mode (2 instances + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+          check-latest: true
+          cache: true
+      - run: make test-cluster
+
+  geesefs:
+    name: GeeseFS (FUSE) scenarios
+    # Heavy and privileged: run manually
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Start environment
+        run: make up
+      - name: GeeseFS tests
+        run: |
+          make test-geesefs
+          make test-symlinks
+          make test-dirpersist
+      - name: Compose logs
+        if: failure()
+        run: docker compose -p s3syncer -f deploy/docker/docker-compose.dev.yml logs --no-color
+      - name: Stop environment
+        if: always()
+        run: make down

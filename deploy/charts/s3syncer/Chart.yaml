@@ -1,0 +1,13 @@
+apiVersion: v2
+name: s3syncer
+description: HTTP proxy that replicates and synchronises several S3-compatible storages
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/spions/s3syncer
+sources:
+  - https://github.com/spions/s3syncer
+keywords:
+  - s3
+  - replication
+  - proxy
