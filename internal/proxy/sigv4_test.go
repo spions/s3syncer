@@ -267,8 +267,13 @@ func TestAuthRejectionLogsAreRateLimited(t *testing.T) {
 		req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential=NOPE/20260101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=00")
 		mw.ServeHTTP(httptest.NewRecorder(), req)
 	}
-	seconds := int64(time.Since(start).Seconds()) + 1
-	if got, max := h.n.Load(), seconds*authLogBurst+int64(authLogBurst); got > max {
-		t.Fatalf("%d log entries for 2000 rejected requests in %ds, want at most %d", got, seconds, max)
+	// The limiter counts per wall-clock second, so a run of N seconds can touch N+1 windows;
+	// each window writes at most authLogBurst entries plus one summary line.
+	windows := int64(time.Since(start).Seconds()) + 2
+	if got, max := h.n.Load(), windows*(authLogBurst+1); got > max {
+		t.Fatalf("%d log entries for 2000 rejected requests (%d windows), want at most %d", got, windows, max)
+	}
+	if got := h.n.Load(); got < authLogBurst {
+		t.Fatalf("only %d entries logged, the first %d rejections must always be logged", got, authLogBurst)
 	}
 }
